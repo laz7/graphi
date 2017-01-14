@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+	<head>
+			<link rel="stylesheet" type="text/css" href="stylesheet.css">
+			<script src='https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'></script>
+	</head>
+
+	<body>
+		<section>
+			<div id="sidebar" class="unselectable">
+				<h1 style="font: 25px Courier; text-align: center; margin: 10px 0px 10px 0px; color: #37C3F9">graphi</h1>
+
+				<hr noshade="noshade">
+
+				<pre>
+Controls:
+  -<strong>double-click</strong> to add node
+  -<strong>left-click</strong> to select/move
+  node
+  -hold <strong>ctrl</strong> to select
+  multiple nodes
+  -<strong>right-click on a node
+  and drag to another node</strong>
+  to create a link between
+  them
+  -<strong>spacebar and drag</strong> to pan
+  around the grid
+  -<strong>scroll</strong> to zoom in/out
+  -<strong>delete</strong> to delete selected
+  item(s)
+				</pre>
+
+				<hr>
+
+
+				<div class="slider" id="zoom">
+					<label id="zoom_label">Zoom</label>
+					<button class="slider_reset" type="submit" title="Reset to default" style="float: right; margin-right:5px;">
+						<img src="reset.png" width="15" height="15"></img>
+					</button>
+					<input id="zoom_slider" type="range" min="5" max="100" value="20"></input>
+					<input id="zoom_text" class="textinput" type="text" style="width:20%; float: left; margin-left: 5px;" value="20"></input>
+				</div>
+
+				<br>
+
+				<label style="margin-bottom: 10px;"><input type="checkbox" id="gridlines" checked style="margin-right:10px;">Grid Lines</label>
+
+				<br>
+
+				<hr>
+
+				<hr>
+
+				<label id="info_abspos">pos (abs): </label> <br>
+				<label id="info_relpos">pos (rel): </label> <br>
+				<label id="info_index">index: </label> <br>
+				<label id="info_type">type: </label> <br> <br>
+
+				<hr>
+
+
+
+				<div class="slider" id="nodesize">
+					<label id="nodesize_label">Node&nbspSize</label>
+					<button class="slider_reset" type="submit" title="Reset to default">
+						<img src="reset.png" width="15" height="15"></img>
+					</button>
+					<button class="slider_all" type="submit" title="Apply to all">
+						<img src="all.png" width="15" height="15"></img>
+					</button>
+					<input id="nodesize_slider" type="range" min="1" max="50" value="3"></input>
+					<input id="nodesize_text" class="textinput" type="text" value="3"></input>
+				</div>
+
+
+				<div class="slider" id="linewidth">
+					<label id="linewidth_label">Line&nbspWidth</label>
+					<button class="slider_reset" type="submit" title="Reset to default">
+						<img src="reset.png" width="15" height="15"></img>
+					</button>
+					<button class="slider_all" type="submit" title="Apply to all">
+						<img src="all.png" width="15" height="15"></img>
+					</button>
+					<input id="linewidth_slider" type="range" min="1" max="50" value="3"></input>
+					<input id="linewidth_text" class="textinput" type="text" style="width:20%; float: left; margin-left: 5px;" value="3"></input>
+				</div>
+
+				<br>
+
+				<div class="color" id="linecolor">
+					<label id="linecolor_label">Line&nbspColor</label>
+
+					<button class="slider_reset" type="submit" title="Reset to default">
+						<img src="reset.png" width="15" height="15"></img>
+					</button>
+					<button class="slider_all" type="submit" title="Apply to all">
+						<img src="all.png" width="15" height="15"></img>
+					</button>
+
+					<input type="color" class = "unselectable" id="linecolor_input" style="float: right; margin-right: 10px; border: none; background-color: white;"></input>
+				</div>
+
+				<br>
+
+				<button type="button" class="top">Meme</button>
+				<button type="button" class="mid">Meme2</button>
+
+
+			</div>
+			<canvas id="canvas" width="80%"></canvas>
+		</section>
+		<script type='text/javascript' src='graph.js'></script>
+	</body>
+</html>

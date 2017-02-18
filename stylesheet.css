@@ -16,6 +16,10 @@
     z-index: 2;
     box-shadow: 1px 0px 33px -3px #666666;
     border-right: 1px solid #C1C1C1;
+
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: scroll;
 }
 #canvas {
     right: 0;
@@ -29,19 +33,6 @@
     -ms-user-select: none;
     user-select: none;
 }
-button.top, button.mid, label {
-    color: #696969
-}
-button.top, button.mid {
-    width: 100%;
-    height: 30px;
-    background-color: Transparent;
-    overflow: hidden;
-    outline: none;
-    border-bottom: 1px solid #C1C1C1;
-    border-right: none;
-    border-top: none;
-}
 label {
     display: inline;
     width: 75%;
@@ -50,12 +41,8 @@ label {
     margin-left: 5px;
     font: 12px Courier;
 }
-
 .top {
     border-top: 1px solid #C1C1C1;
-}
-button:hover {
-    border-left: 3px solid #30D8F1;
 }
 .slider {
     margin-bottom: 30px;
@@ -71,6 +58,31 @@ button:hover {
     margin-left: 5px;
 }
 
+
+button.top, button.mid, label {
+    color: #696969
+}
+button.top, button.mid {
+    width: 100%;
+    height: 30px;
+    background-color: Transparent;
+    overflow: hidden;
+    outline: none;
+    border-bottom: 1px solid #C1C1C1;
+    border-right: none;
+    border-top: none;
+
+    box-shadow: inset 0 0 0 0 #30D8F1;
+    transition: all ease 0.3s;
+    animation-iteration-count: 1;
+}
+button.top:hover, button.mid:hover {
+    box-shadow: inset 5px 0 0 0 #30D8F1;
+}
+button.top:active, button.mid:active {
+    box-shadow: inset 300px 0 0 0 #30D8F1;
+    color: #fff;
+}
 .slider button, .color button {
     border: 0;
     background: transparent;
@@ -79,15 +91,14 @@ button:hover {
     outline: none;
     vertical-align: bottom;
 
+
     float: right;
     margin: 3px 5px 0 0;
 }
-.slider button:hover, .color button:hover {
-    opacity: 0.8;
-}
-.slider button:active, .color button:hover {
-    opacity: 0.6;
-}
+.slider button:hover, .color button:hover { opacity: 0.8; }
+.slider button:active, .color button:hover { opacity: 0.6; }
+
+
 img {
     vertical-align: bottom;
 }
@@ -109,6 +120,21 @@ hr {
     background-color: #A2A2A2;
     margin-bottom: 15px;
 }
+#outputbox {
+    width: 95%;
+    height: 150px;
+    margin: 0 auto;
+    background-color: Transparent;
+    border: 1px solid #696969;
+    margin-top: 5px;
+}
+p {
+    margin: 5px 5px 5px 5px;
+    font: 12px Courier;
+}
+
+
+
 
 
 /*

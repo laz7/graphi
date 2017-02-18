@@ -21,6 +21,7 @@ var viewport = [ (bounds[0] + bounds[1]) / 2 - ((canvas.width / 2) / grid_size),
 /* ------------------------- *\
 | --  Utility functions  ---  |
 \* ------------------------- */
+function format_vec( vec, floor ) { floor = floor || true; return "[" + (floor ? Math.floor( vec[0] ) : vec[0]) + ", " + (floor ? Math.floor( vec[1] ) : vec[1]) + "]"; }
 function clamp( num, low, high ) { return Math.min( Math.max( num, low ), high ); }
 function fillstroke( oc, oa, fc, fa ) {
 	ctx.strokeStyle = oc;
@@ -50,6 +51,7 @@ function dot( v1, v2 ) {
 function dist( p1, p2 ) {
 	return Math.sqrt( Math.pow( p2[0] - p1[0], 2 ) + Math.pow( p2[1] - p1[1], 2 ) );
 }
+function magnitude( v ) { return dist( v, [0, 0] ); }
 Array.prototype.remove = function(from, to) {
 	var rest = this.slice((to || from) + 1 || this.length);
 	this.length = from < 0 ? this.length + from : from;
@@ -154,47 +156,92 @@ function pointInNode( pos ) {
 	}
 	return null;
 }
-function getLinkPoint( node, to ) {
-	if( !node || !to ) return;
-	return getLinkPointManual( rel_screen_pos( node.position ), node.shape, node.size, rel_screen_pos( to.position ) );
-}
-function getLinkPointManual( from_pos, from_shape, from_size, to_pos ) {
-	var diff = [ to_pos[0] - from_pos[0], to_pos[1] - from_pos[1] ]; //Difference vector
-	var unit_diff = normalize( diff );
 
-	var ret;
-	switch( from_shape ) {
+//Given a vector defined by a start and end point, return true if 'pos' is on the right-hand side of the vector, and false if 'pos' is on the left
+function toRight( vec_start, vec_end, pos ) {
+	/*
+	 * Most likley an extremely roundabout way to fix the arc direction but oh well (maybe I'll think of a better way in the future)
+	 * We compare the direction of the difference vector between the two nodes and the rejection (perpendicular component) of the
+	 * vector pointing to your cursor to determine which "side" of the difference vector your cursor is on.  IF it's to the "left"
+	 * of the vector going from node one to node two, we have to reverse the order of the arc angles.
+	 */
+	var to_right = true;
+	var perp = vecProj( vec_start, vec_end, pos )[1];
+	var diff = [ vec_end[0] - vec_start[0], vec_end[1] - vec_start[1] ];
+	var perp_dir = [ Math.sign( perp[0] ), Math.sign( perp[1] ) ];
+	var diff_dir = [ Math.sign( diff[0] ), Math.sign( diff[1] ) ];
+
+	//Check if the direction of the perpendicular is to the right or left of the original vector.  Update to_right bool accordingly
+	switch( Math.sign( perp_dir[0] * perp_dir[1] ) ) {
+		case 1:
+			to_right = !( perp_dir[0] == diff_dir[0] && perp_dir[1] == -diff_dir[1]); break;
+		case -1:
+			to_right = !( perp_dir[0] == -diff_dir[0] && perp_dir[1] == diff_dir[1] ); break;
 		case 0:
-			ret = [ from_pos[0] + unit_diff[0] * from_size * grid_size / 2, from_pos[1] + unit_diff[1] * from_size * grid_size / 2 ];
-			break;
+			to_right = !( perp_dir[0] == diff_dir[1] && perp_dir[1] == diff_dir[0] ); break;
 	}
-	return ret;
+
+	return to_right;
+}
+
+function pointInDirection( start, end, dist ) {
+	var unit_diff = normalize( [ end[0] - start[0], end[1] - start[1] ] );
+	return [ start[0] + unit_diff[0] * dist, start[1] + unit_diff[1] * dist ];
+}
+
+/*
+	Takes three vector positions, and returns the projection and rejection (in that order) of the vector pointing from vec1 to vec3 onto the vector pointing from vec1 to vec2
+*/
+function vecProj( start, end, pos ) {
+	var link_vec = [ end[0] - start[0], end[1] - start[1] ]; //Vector from start to end
+	var diff_vec = [ pos[0] - start[0], pos[1] - start[1] ]; //Vector from start to the point
+
+	var proj = dot( diff_vec, normalize( link_vec ) ); //Dot product representing the length of the projection of diff_vec on to link_vec
+	var proj_vec = [ normalize( link_vec )[0] * proj, normalize( link_vec )[1] * proj ];
+	var perp_vec = [ diff_vec[0] - proj_vec[0], diff_vec[1] - proj_vec[1] ];
+
+	return [ proj_vec, perp_vec, proj, magnitude( perp_vec ) ];
 }
 function pointInLink( pos ) {
 	var link = null;
 	var min_dist = 9999999;
+	if( pos == null ) return false;
 
 	for(j = 0; j < links.length; j++ ) {
 		if( !links || !links[j] ) { continue; }
 
-		var start = getLinkPoint( links[j].node_one, links[j].node_two ); //Start point of link
-		var end = getLinkPoint( links[j].node_two, links[j].node_one ); //End point of link
+		var start = pointInDirection( rel_screen_pos( links[j].node_one.position ), rel_screen_pos( links[j].node_two.position ), links[j].node_one.size * grid_size * 0.5 );
+		var end = pointInDirection( rel_screen_pos( links[j].node_two.position ), rel_screen_pos( links[j].node_one.position ), links[j].node_two.size * grid_size * 0.5 );
 
 		if( !start || !end ) continue;
 
-		var link_vec = [ end[0] - start[0], end[1] - start[1] ]; //Vector from start to end
-		var diff_vec = [ pos[0] - start[0], pos[1] - start[1] ]; //Vector from start to the point
+		if( links[j].arc_point == null ) {
+			var v = vecProj( start, end, pos );
+			var proj = v[2];
+			var perp = v[3];
+			//Check to make sure that the point was within the bounds of the link, and that the point is not too far away perpendicularly
+			if( proj < 0 || proj > dist( start, end ) || perp > 50 ) { continue; }
 
-		var proj = dot( diff_vec, normalize( link_vec ) ); //Dot product representing the length of the projection of diff_vec on to link_vec
-		var perp = Math.sqrt( Math.pow( dist( start, pos ), 2 ) - Math.pow( proj, 2 ) ) //The length of the perpendicular component of the projection
+			//If everything passes, then the link is recorded until/if a closer link    is found
+			if( perp < min_dist ) {
+				min_dist = perp;
+				link = links[j];
+			}
+		} else {
+			//If the cursor position is not on the same side of the nodes as the arc point, it clearly is not being selected
+			if( toRight( start, end, rel_screen_pos( links[j].arc_point ) ) != toRight( start, end, pos ) ) { continue; }
 
-		//Check to make sure that the point was within the bounds of the link, and that the point is not too far away perpendicularly
-		if( proj < 0 || proj > dist( start, end ) || perp > 50 ) { continue; }
+			var p = equiPoint( rel_screen_pos( links[j].node_one.position ), rel_screen_pos( links[j].arc_point ), rel_screen_pos( links[j].node_two.position ) );
+			var d = Math.abs( dist( p, rel_screen_pos( links[j].arc_point ) ) - dist( p, pos ) );
 
-		//If everything passes, then the link is recorded until/if a closer link    is found
-		if( perp < min_dist ) {
-			min_dist = perp;
-			link = links[j];
+			console.log( "dist: " + d );
+
+			if( d > 50 ) { continue; }
+
+			if( d < min_dist ) {
+				min_dist = d;
+				link = links[j];
+			}
 		}
 	}
 
@@ -203,12 +250,59 @@ function pointInLink( pos ) {
 var toType = function(obj) {
   return ({}).toString.call(obj).match(/\s([a-zA-Z]+)/)[1].toLowerCase()
 }
+function perpVec( p1, p2, mag ) { //Returns the normalized perpendicular vector
+	var diff_norm = normalize( [ p2[0] - p1[0], p2[1] - p1[1] ] );
+	return [ -diff_norm[1], diff_norm[0] ];
+}
+function equiPoint( p1, p2, p3 ) { //Returns the point equidistant from all three given points
+	var midp1 = [ ( p1[0] + p2[0] ) / 2, ( p1[1] + p2[1] ) / 2 ];
+	var midp2 = [ ( p2[0] + p3[0] ) / 2, ( p2[1] + p3[1] ) / 2 ];
+	var perp1 = [ midp1[0] + perpVec( midp1, p2 )[0] * 2, midp1[1] + perpVec( midp1, p2 )[1] * 2 ];
+	var perp2 = [ midp2[0] + perpVec( midp2, p2 )[0] * 2, midp2[1] + perpVec( midp2, p2 )[1] * 2 ];
+
+	var x1 = midp1[0]; var y1 = midp1[1]; var x2 = perp1[0]; var y2 = perp1[1];
+	var x3 = midp2[0]; var y3 = midp2[1]; var x4 = perp2[0]; var y4 = perp2[1];
+
+	//Thanks wikipedia
+	return [ ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/((x1-x2)*(y3-y4)-(y1-y2)*(x3-x4)), ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/((x1-x2)*(y3-y4)-(y1-y2)*(x3-x4)) ];
+}
+
+/*
+ * Returns the intersection points of two circles given their positions and radii in the form
+ * Return value of the form [ [ first_intersection_x, first_intersection_y ], [ second_intersection_x, second_intersection_y ] ]
+ */
+function circleCircleIntersect( x1, y1, r1, x2, y2, r2 ) {
+	var diff_x = x2 - x1;
+	var diff_y = y2 - y1;
+	var d = dist( [x1, y1], [x2, y2] );
+	var k = ( d*d + r1*r1 - r2*r2 ) / ( 2 * d );
+
+	var ax1 = x1 + (diff_x * k)/d;
+	var ax2 = (diff_y / d) * Math.sqrt( r1*r1 - k*k );
+	var ay1 = y1 + (diff_y * k)/d;
+	var ay2 = (diff_x / d) * Math.sqrt( r1*r1 - k*k );
+
+	return [ [ ax1 + ax2, ay1 - ay2 ], [ ax1 - ax2, ay1 + ay2 ] ];
+}
+//Thanks http://stackoverflow.com/questions/16025326/html-5-canvas-complete-arrowhead
+function drawArrowhead( x, y, radians ) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.translate( x, y );
+    ctx.rotate( radians );
+    ctx.moveTo( 0, 0 );
+    ctx.lineTo( grid_size / 4, grid_size / 2 );
+    ctx.lineTo( -grid_size / 4, grid_size / 2 );
+    ctx.closePath();
+    ctx.restore();
+    ctx.fill();
+}
 
 
 /* ------------------------- *\
 | -------  Node class  -----  |
 \* ------------------------- */
-var Node = function( value, position, size, shape, text, outline_width, outline_color, outline_alpha, fill_color, fill_alpha ) {
+var Node = function( value, position, size, shape, text, outline_width, outline_color, outline_alpha, fill_color, fill_alpha, font, font_size ) {
 	this.value = value || [0];
 	this.position = position || [0, 0];
 	this.position = snap( this.position );
@@ -221,6 +315,9 @@ var Node = function( value, position, size, shape, text, outline_width, outline_
 	this.fill_color = fill_color || "#000000";
 	this.fill_alpha = fill_alpha || 0;
 	this.text = text || "";
+
+	this.font = font || "courier";
+	this.font_size = font_size || 1;
 
 	this.selected = false;
 
@@ -257,9 +354,10 @@ Node.prototype.setPos = function( pos ) {
 	}
 	this.position = pos;
 }
+
 Node.prototype.drawAsCircle = function( radius ) {
 	ctx.beginPath();
-	ctx.lineWidth = this.outline_width;
+	ctx.lineWidth = this.outline_width * grid_size;
 
 	var q = rel_screen_pos( this.position );
 	ctx.arc( q[0], q[1], radius, 0, 2*Math.PI );
@@ -267,13 +365,47 @@ Node.prototype.drawAsCircle = function( radius ) {
 	fillstroke( this.outline_color, this.outline_alpha, this.fill_color, this.fill_alpha );
 
 	var p = rel_screen_pos( this.position );
-	ctx.font = "30px bold Courier New";
+	ctx.font = (this.font_size * grid_size).toString() + "px " + this.font;
 	ctx.textAlign = "center";
-	ctx.fillText( this.text, p[0], p[1] + 8 );
+
+	var lines = [];
+	var text = this.text
+	var width_calc = this.size * grid_size;
+	var spacing = 3;
+	var m = this.size * grid_size * 0.5 * Math.sqrt(2);
+
+	if( text.length > 0 ) {
+		//Divide the total pixel width of the text by the maximum text pixel width
+		//for the node to get how many lines the text needs to be divided up into
+		var num_lines = Math.ceil( ctx.measureText( text ).width / m );
+
+		//Divide the maximum pixel width by the average pixel width
+		//for each character to determine the number of characters per line
+		var line_width = Math.floor( m / ( ctx.measureText( text ).width / text.length ) );
+
+		//Iterate through, push the appropriate substrings of the
+		//original text as separate entries (which are the different lines of text) in our lines array
+		for(i = 0; i < num_lines; i++ ) { lines.push( text.substring( line_width * i, Math.min( line_width * (i+1), text.length ) ) ); }
+
+		//Determine if the number of lines exceeds the node's capacity.
+		//If so, store the cutoff location so a ".." can be added later
+		var cutoff = this.size * grid_size / m + 100;
+		if( lines.length * ( this.font_size * grid_size + spacing ) > m ) cutoff = Math.floor( m / ( this.font_size * grid_size + spacing ) );
+
+		//Offset so the text is centered vertically
+		var start = ( Math.min( lines.length, cutoff ) - 1 ) * ( ( this.font_size * grid_size + spacing ) / 2 );
+
+		//Draw the lines of text
+		for(i = 0; i < Math.min( cutoff, lines.length ); i++ ) {
+			if( i == cutoff - 1 ) lines[i] = lines[i].substring( 0, lines[i].length - 2 ) + "..";
+
+			ctx.fillText( lines[i], p[0], p[1] + (this.font_size / 2) - start + i * ( spacing + this.font_size * grid_size ) );
+		}
+	}
 };
 Node.prototype.drawAsRect = function( width, length ) {
 	ctx.beginPath();
-	ctx.lineWidth = 3;
+	ctx.lineWidth = this.outline_width * grid_size;
 	ctx.rect( this.position[0] - viewport[0] - (width / 2), this.position[1] - viewport[1] - (length / 2), length, width );
 
 	fillstroke( this.outline_color, this.outline_alpha, this.fill_color, this.fill_alpha );
@@ -315,7 +447,8 @@ var Link = function( node_one, node_two, width, color, direction, arc ) {
 	this.node_two = node_two || null;
 	this.width = width || 3;
 	this.color = color || "#fffff";
-	this.arc = arc || 0;
+	this.arc_point = arc || null;
+	this.direction = direction || 0;
 
 	this.position_override = null;
 	this.selected = false;
@@ -327,41 +460,83 @@ Link.prototype.setPositionOverride = function(p) {
 	this.position_override = p;
 };
 Link.prototype.draw = function() {
+	if( this.node_one == undefined ) { return; }
+
 	if( this.selected ) {
 		ctx.shadowBlur = 20;
 		ctx.shadowColor = this.color;
 	}
 
-	if( this.node_one == undefined ) { return; }
-	var p1, p2;
-
-	if( this.position_override == null ) {
-		p1 = getLinkPoint( this.node_one, this.node_two );
-		p2 = getLinkPoint( this.node_two, this.node_one );
-	} else {
-		if( this.node_one.pointInBounds( this.position_override ) ) { return; }
-
-		var n = pointInNode( this.position_override );
-		if( n == null ) {
-			p1 = getLinkPointManual( rel_screen_pos( this.node_one.position ), this.node_one.shape, this.node_one.size, this.position_override );
-			p2 = this.position_override;
-		} else {
-			p1 = getLinkPoint( this.node_one, n );
-			p2 = getLinkPoint( n, this.node_one );
-		}
-	}
-
-	ctx.lineWidth = this.width;
+	ctx.lineWidth = this.width * grid_size;
 	ctx.strokeStyle = this.color;
+	ctx.fillStyle = this.color;
 
-	if( this.arc == 0 ) {
+	if( this.arc_point == null ) {
+		var p1, p2;
+
+		if( this.position_override == null ) {
+			p1 = pointInDirection( rel_screen_pos( this.node_one.position ), rel_screen_pos( this.node_two.position ), this.node_one.size * grid_size * 0.5 );
+			p2 = pointInDirection( rel_screen_pos( this.node_two.position ), rel_screen_pos( this.node_one.position ), this.node_two.size * grid_size * 0.5 );
+		} else {
+			if( this.node_one.pointInBounds( this.position_override ) ) { return; }
+
+			var n = pointInNode( this.position_override );
+			if( n == null ) {
+				p1 = pointInDirection( rel_screen_pos( this.node_one.position ), this.position_override, this.node_one.size * grid_size * 0.5 );
+				p2 = this.position_override;
+			} else {
+				p1 = pointInDirection( rel_screen_pos( this.node_one.position ), rel_screen_pos( n.position ), this.node_one.size * grid_size * 0.5 );
+				p2 = pointInDirection( rel_screen_pos( n.position ), rel_screen_pos( this.node_one.position ), n.size * grid_size * 0.5 );
+			}
+		}
+
+
 		ctx.beginPath();
 		ctx.moveTo( p1[0], p1[1] );
 		ctx.lineTo( p2[0], p2[1] );
 		ctx.stroke();
-	} else {
 
+		//Arrowheads
+		if( this.direction == -1 || this.direction == 2 ) { drawArrowhead( p1[0], p1[1], Math.atan( ( p2[1] - p1[1] ) / ( p2[0] - p1[0] ) ) + ( ( p2[0] >= p1[0] ) ? -90 : 90) * Math.PI / 180 ); }
+		if( this.direction == 1 || this.direction == 2 ) { drawArrowhead( p2[0], p2[1], Math.atan( ( p2[1] - p1[1] ) / ( p2[0] - p1[0] ) ) + ( ( p2[0] >= p1[0] ) ? 90 : -90 ) * Math.PI / 180 ); }
+	} else {
+		var n1 = rel_screen_pos( this.node_one.position );
+		var n2 = rel_screen_pos( this.node_two.position );
+		var n3 = rel_screen_pos( this.arc_point );
+
+		var p = equiPoint( n1, n3, n2 );
+		var r = dist( p, n3 );
+		var to_right = toRight( n1, n2, n3 );
+
+		/*
+		 * Calculate the point where the circle of the arc and the node intersect
+		 * Use this to calculate the start and end angle of the arc
+		 */
+		var cc1 = circleCircleIntersect( n1[0], n1[1], this.node_one.size * grid_size * 0.5, p[0], p[1], r )[ to_right ? 0 : 1 ];
+		var cc2 = circleCircleIntersect( n2[0], n2[1], this.node_two.size * grid_size * 0.5, p[0], p[1], r )[ to_right ? 1 : 0 ];
+		var ang_one = Math.asin( Math.abs( cc1[1] - p[1] ) / dist( cc1, p ) );
+		ang_one = p[0] < cc1[0] ? (p[1] < cc1[1] ? ang_one : -ang_one) : (p[1] < cc1[1] ? (Math.PI - ang_one) : Math.PI + ang_one);
+		var ang_two = Math.asin( Math.abs( cc2[1] - p[1] ) / dist( cc2, p ) );
+		ang_two = p[0] < cc2[0] ? (p[1] < cc2[1] ? ang_two : -ang_two) : (p[1] < cc2[1] ? (Math.PI - ang_two) : (Math.PI + ang_two));
+
+		//Draw the arc and take into account which side the cursor lies on
+		ctx.beginPath();
+		ctx.arc( p[0], p[1], r, to_right ? ang_one : ang_two, to_right ? ang_two : ang_one );
+		ctx.stroke();
+
+		/*if( this.selected ) {
+			ctx.beginPath();
+			ctx.arc( n3[0], n3[1], 3, 0, Math.PI * 2 );
+			ctx.stroke();
+		}*/
+
+		//Arrowheads
+		var start_diff = [ cc1[0] - n1[0], cc1[1] - n1[1] ];
+		var end_diff = [ cc2[0] - n2[0], cc2[1] - n2[1] ];
+		if( this.direction == -1 || this.direction == 2 ) { drawArrowhead( cc1[0], cc1[1], Math.atan2( start_diff[1], start_diff[0] ) - Math.PI / 2 ); }
+		if( this.direction == 1 || this.direction == 2 ) { drawArrowhead( cc2[0], cc2[1], Math.atan2( end_diff[1], end_diff[0] ) - Math.PI / 2 ); }
 	}
+
 	ctx.shadowBlur = 0;
 	ctx.shadowColor = "transparent";
 };
@@ -379,7 +554,8 @@ Link.prototype.delete = function() {
 	var requestID;
 
 	var default_size = 3;
-	var default_width = 2;
+	var default_width = 0.1;
+	var default_direction = 1;
 	var default_color = "#000000";
 
 	var space_down = false;
@@ -485,7 +661,7 @@ Link.prototype.delete = function() {
 		slide_delta = [slide_delta[0] + (decel * (dir1 ? -1 : 1 )), slide_delta[1] + (decel * (dir2 ? -1 : 1))];
 
 		draw_all();
-		requestID = window.requestAnimationFrame( function() { nav_slide( dir1, dir2 ); } , canvas );
+		requestID = window.requestAnimationFrame( function() { nav_slide( dir1, dir2 ); }, canvas );
 	}
 	function start_slide( dir1, dir2 ) { if( !requestID ) nav_slide( dir1, dir2 ); }
 	function end_slide() { if( requestID ) { window.cancelAnimationFrame( requestID ); requestID = undefined; } }
@@ -550,7 +726,6 @@ Link.prototype.delete = function() {
 		if( e.which == 1 ) {
 			if( !doubleclick ) {
 				if( rc_down ) return;
-				console.log( rc_down );
 				lc_down = true;
 
 				doubleclick = true;
@@ -589,7 +764,7 @@ Link.prototype.delete = function() {
 				}
 
 				//Update sliders with correct information
-				//If multiple items are selected with different attributes,
+				//If multiple items are selected with different attributes, (multiple) is displayed
 				if( selected.length >= 1 ) {
 					updateInfo( selected[0], selected.length > 1 );
 
@@ -621,8 +796,8 @@ Link.prototype.delete = function() {
 			} else {
 				//Prevent creating new nodes on top of old ones
 				if( pointInNode( mouse_position ) == null ) {
-					var test = new Node( 5, abs_pos( [ mouse_position[0] / grid_size, mouse_position[1] / grid_size ] ), default_size, 0, "", default_width, default_color );
-					test.draw();
+					var node = new Node( 5, abs_pos( [ mouse_position[0] / grid_size, mouse_position[1] / grid_size ] ), default_size, 0, "", default_width, default_color );
+					node.draw();
 				}
 			}
 		} else if( e.which == 3 ) {
@@ -630,7 +805,7 @@ Link.prototype.delete = function() {
 			rc_down = true;
 			var p = pointInNode( mouse_position );
 			if( p != null ) {
-				new_link = new Link( p, null, default_width, default_color );
+				new_link = new Link( p, null, default_width, default_color, default_direction );
 			}
 		}
 	};
@@ -640,6 +815,7 @@ Link.prototype.delete = function() {
 		if( e.which == 1 ) {
 			lc_down = false;
 
+			console.log( mouse_position );
 			if( !pointInNode( mouse_position ) && !pointInLink( mouse_position ) ) deselect_all();
 			draw_all();
 		} else if( e.which == 3 ) {
@@ -657,6 +833,20 @@ Link.prototype.delete = function() {
 					new_link = null;
 				}
 				draw_all();
+			} else if( selected.length > 0 ) { //Changing direction of links
+				var link = pointInLink( mouse_position );
+				if( link != null ) {
+					for(i = 0; i < selected.length; i++) {
+						if( selected[i].index == link.index ) {
+							link.direction++;
+							if( link.direction > 2 ) link.direction = -1;
+							default_direction = link.direction;
+							draw_all();
+
+							break;
+						}
+					}
+				}
 			}
 		}
 	}
@@ -672,14 +862,21 @@ Link.prototype.delete = function() {
 
 		if( lc_down ) {
 			if( selected.length == 0 ) return;
+			else if( selected.length == 1 && selected[0] instanceof Link ) {
+				var pos_n1 = rel_screen_pos( selected[0].node_one.position );
+				var pos_n2 = rel_screen_pos( selected[0].node_two.position );
 
-			//Moving a node:
-			//Adjust all of the selected nodes using their initial relative positions to the mouse position (maintaining their own relative position)
-			for(j = 0; j < selected.length; j++) {
-				if( !relative_pos[j] ) continue;
-				selected[j].setPos( [ mouse_position[0] / grid_size + relative_pos[j][0], mouse_position[1] / grid_size + relative_pos[j][1] ] );
+				var v = vecProj( pos_n1, pos_n2, mouse_position );
+				if( ( v[2] > 0 && v[2] < dist( pos_n1, pos_n2 ) ) && v[3] < 20 ) { selected[0].arc_point = null; }
+				else { selected[0].arc_point = abs_pos( [ mouse_position[0] / grid_size, mouse_position[1] / grid_size ] ); }
+			} else {
+				//Moving a node:
+				//Adjust all of the selected nodes using their initial relative positions to the mouse position (maintaining their own relative position)
+				for(j = 0; j < selected.length; j++) {
+					if( !relative_pos[j] ) continue;
+					selected[j].setPos( [ mouse_position[0] / grid_size + relative_pos[j][0], mouse_position[1] / grid_size + relative_pos[j][1] ] );
+				}
 			}
-
 			updateInfo( selected[0], selected.length > 1 );
 			draw_all();
 		} else if( rc_down && new_link != null ) {
@@ -690,7 +887,6 @@ Link.prototype.delete = function() {
 	};
 
 	window.addEventListener( "keydown", function(e) {
-
 		if( e.keyCode == 16 || e.keyCode == 17 ) {
 			shift = e.keyCode == 16;
 			ctrl = e.keyCode == 17;
@@ -768,11 +964,12 @@ Link.prototype.delete = function() {
 		var width = width_override || default_width;
 		var zoom = zoom_override || grid_size;
 		zoom = Math.round( zoom * 10 ) / 10;
+
 		document.getElementById( "nodesize_slider" ).value = size;
 		document.getElementById( "nodesize_text" ).value = size;
 
-		document.getElementById( "linewidth_slider" ).value = width;
-		document.getElementById( "linewidth_text" ).value = width;
+		document.getElementById( "linewidth_slider" ).value = Math.floor( width * 50 );
+		document.getElementById( "linewidth_text" ).value = Math.floor( width * 50 );
 
 		document.getElementById( "zoom_slider" ).value = zoom;
 		document.getElementById( "zoom_text" ).value = zoom;
@@ -800,10 +997,10 @@ Link.prototype.delete = function() {
 					type.innerHTML = "type: <strong>Link</strong>"
 				}
 			} else {
-				abspos.innerHTML = "pos (abs): <strong>(multiple)";
-				relpos.innerHTML = "pos (rel): <strong>(multiple)";
-				index.innerHTML = "index: <strong>(multiple)";
-				type.innerHTML = "type: <strong>(multiple)";
+				abspos.innerHTML = "pos (abs): <strong>(multiple)</strong>";
+				relpos.innerHTML = "pos (rel): <strong>(multiple)</strong>";
+				index.innerHTML = "index: <strong>(multiple)</strong>";
+				type.innerHTML = "type: <strong>(multiple)</strong>";
 			}
 		} else {
 			abspos.innerHTML = "pos (abs): ";
@@ -824,8 +1021,9 @@ Link.prototype.delete = function() {
  		}
 	});
 	document.getElementById( "linewidth_slider" ).addEventListener( 'input', function() {
-		default_width = document.getElementById( "linewidth_slider" ).value || 2;
-		document.getElementById( "linewidth_text" ).value = default_width;
+		var value = document.getElementById( "linewidth_slider" ).value || 5;
+		document.getElementById( "linewidth_text" ).value = value;
+		default_width = value / 50;
 
 		if( selected.length > 0 ) {
 			for(i = 0; i < selected.length; i++) {

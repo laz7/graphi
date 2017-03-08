@@ -234,8 +234,6 @@ function pointInLink( pos ) {
 			var p = equiPoint( rel_screen_pos( links[j].node_one.position ), rel_screen_pos( links[j].arc_point ), rel_screen_pos( links[j].node_two.position ) );
 			var d = Math.abs( dist( p, rel_screen_pos( links[j].arc_point ) ) - dist( p, pos ) );
 
-			console.log( "dist: " + d );
-
 			if( d > 50 ) { continue; }
 
 			if( d < min_dist ) {
@@ -284,15 +282,106 @@ function circleCircleIntersect( x1, y1, r1, x2, y2, r2 ) {
 
 	return [ [ ax1 + ax2, ay1 - ay2 ], [ ax1 - ax2, ay1 + ay2 ] ];
 }
+
+/*
+ * Returns the intersection points between a circle and a rectangle (assumed "upright" (not at angle)) given:
+ * The x and y coordinates of the circle's center, as well as its radius
+ * The x and y coordinates of the rectangle's upper-left corner, as well as its width and height
+ * circleRectIntersect( circle center x, circle center y, circle radius, rectangle top-left x, rectangle top-left y, rectangle width, rectangle height ) = [ [ intersection 1 x, intersection 1 y ], [ intersection 2 x, intersection 2 y ], ... ]
+ */
+function circleRectIntersect( cx, cy, cr, rx, ry, rw, rh ) {
+	function inb( pos, center ) { return pos < center + cr && pos > center - cr ? 0 : ( pos > center + cr ? 1 : -1 ); }
+	function calc_x_pos( y ) { return Math.sqrt( cr*cr - ( y - cy )*( y - cy ) ) + cx; }
+	function calc_x_neg( y ) { return -Math.sqrt( cr*cr - ( y - cy )*( y - cy ) ) + cx; }
+	function calc_y_pos( x ) { return Math.sqrt( cr*cr - ( x - cx )*( x - cx ) ) + cy; }
+	function calc_y_neg( x ) { return -Math.sqrt( cr*cr - ( x - cx )*( x - cx ) ) + cy; }
+
+	var ix = [];
+
+	//Assign -1, 0, or 1 to each x and y value of all four corners of the rectangle
+	//-1 = the coordinate is outside to the left of the circle
+	//0 = the coordinate is inside of the circle
+	//1 = the coordinate is outside to the right of the circle
+	var tl_x = inb( rx, cx );
+	var tl_y = inb( ry, cy );
+	var tr_x = inb( rx + rw, cx );
+	var tr_y = tl_y;
+	var bl_x = tl_x;
+	var bl_y = inb( ry + rh, cy );
+	var br_x = tr_x;
+	var br_y = bl_y;
+
+
+	if( tl_x == 0 ) {
+		if( tl_y == 1 && bl_y == 0 ) { ix.push( [ rx, calc_y_pos( rx ) ] ); }
+		else if( tl_y == 1 && bl_y == -1 ) {
+			ix.push( [ rx, calc_y_pos( rx ) ] );
+			ix.push( [ rx, calc_y_neg( rx ) ] );
+		}
+		else if( tl_y == 0 && bl_y == -1 ) { ix.push( [ rx, calc_y_neg( rx ) ] ); }
+	}
+	if( tr_x == 0 ) {
+		if( tr_y == 1 && br_y == 0 ) { ix.push( [ rx + rw, calc_y_pos( rx + rw ) ] ); }
+		else if( tr_y == 1 && br_y == -1 ) {
+			ix.push( [ rx + rw, calc_y_pos( rx + rw ) ] );
+			ix.push( [ rx + rw, calc_y_neg( rx + rw ) ] );
+		}
+		else if( tr_y == 0 && br_y == -1 ) { ix.push( [ rx + rw, calc_y_neg( rx + rw ) ] ); }
+	}
+	if( tl_y == 0 ) {
+		if( tl_x == -1 && tr_x == 0 ) { ix.push( [ ry, calc_x_neg( ry ) ] ); }
+		else if( tl_x == 1 && tr_x == -1 ) {
+			ix.push( [ ry, calc_x_pos( ry ) ] );
+			ix.push( [ ry, calc_x_neg( ry ) ] );
+		}
+		else if( tl_x == 0 && tr_x == 1 ) { ix.push( [ ry, calc_x_pos( ry ) ] ); }
+	}
+	if( bl_y == 0 ) {
+		if( bl_x == -1 && br_x == 0 ) { ix.push( [ ry + rh, calc_x_neg( ry + rh ) ] ); }
+		else if( bl_x == -1 && br_x == 1 ) {
+			ix.push( [ ry + rh, calc_x_neg( rx + rh ) ] );
+			ix.push( [ ry + rh, calc_x_pos( rx + rh ) ] );
+		}
+		else if( bl_x == 0 && br_x == 1 ) { ix.push( [ ry + rh, calc_x_pos( ry + rh ) ] ); }
+	}
+
+	return ix;
+}
+
+//Returns angle from center to first point, and angle from center to second point (for drawing arcs, in radians, in relation to horizontal, counterclockwise)
+function arcAngle( center, p1, p2 ) {
+	var ang_one = Math.asin( Math.abs( p1[1] - center[1] ) / dist( p1, center ) );
+	var ang_two = Math.asin( Math.abs( p2[1] - center[1] ) / dist( p2, center ) );
+
+	return [
+		center[0] < p1[0] ? (center[1] < p1[1] ? ang_one : -ang_one) : (center[1] < p1[1] ? (Math.PI - ang_one) : Math.PI + ang_one),
+		center[0] < p2[0] ? (center[1] < p2[1] ? ang_two : -ang_two) : (center[1] < p2[1] ? (Math.PI - ang_two) : Math.PI + ang_two)
+	];
+}
+
+CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+	if (w < 2 * r) r = w / 2;
+	if (h < 2 * r) r = h / 2;
+	this.beginPath();
+	this.moveTo(x+r, y);
+	this.arcTo(x+w, y,   x+w, y+h, r);
+	this.arcTo(x+w, y+h, x,   y+h, r);
+	this.arcTo(x,   y+h, x,   y,   r);
+	this.arcTo(x,   y,   x+w, y,   r);
+	this.closePath();
+	return this;
+}
+
+
 //Thanks http://stackoverflow.com/questions/16025326/html-5-canvas-complete-arrowhead
-function drawArrowhead( x, y, radians ) {
-    ctx.save();
+function drawArrowhead( x, y, radians, size ) {
+	ctx.save();
     ctx.beginPath();
     ctx.translate( x, y );
     ctx.rotate( radians );
     ctx.moveTo( 0, 0 );
-    ctx.lineTo( grid_size / 4, grid_size / 2 );
-    ctx.lineTo( -grid_size / 4, grid_size / 2 );
+    ctx.lineTo( size * grid_size / 4, size * grid_size / 2 );
+    ctx.lineTo( size * -grid_size / 4, size * grid_size / 2 );
     ctx.closePath();
     ctx.restore();
     ctx.fill();
@@ -320,6 +409,7 @@ var Node = function( value, position, size, shape, text, outline_width, outline_
 	this.font_size = font_size || 1;
 
 	this.selected = false;
+	this.badge = null;
 
 	this.index = nodes.length;
 	nodes.push(this);
@@ -353,6 +443,7 @@ Node.prototype.setPos = function( pos ) {
 		}
 	}
 	this.position = pos;
+	this.badge.draw();
 }
 
 Node.prototype.drawAsCircle = function( radius ) {
@@ -360,8 +451,19 @@ Node.prototype.drawAsCircle = function( radius ) {
 	ctx.lineWidth = this.outline_width * grid_size;
 
 	var q = rel_screen_pos( this.position );
-	ctx.arc( q[0], q[1], radius, 0, 2*Math.PI );
+	if( this.badge == null ) { ctx.arc( q[0], q[1], radius, 0, 2*Math.PI ); }
+	else {
+		var b = this.badge;
+		var bp = rel_screen_pos( b.position );
+		var ix = circleRectIntersect( q[0], q[1], this.size * grid_size, bp[0], bp[1], b.width, b.height );
 
+		if( ix.length >= 2 ) {
+			var ang = arcAngle( q, ix[0], ix[1] );
+			ctx.arc( q[0], q[1], radius, ang[0], ang[1] );
+		} else {
+			ctx.arc( q[0], q[1], radius, 0, 2*Math.PI );
+		}
+	}
 	fillstroke( this.outline_color, this.outline_alpha, this.fill_color, this.fill_alpha );
 
 	var p = rel_screen_pos( this.position );
@@ -497,8 +599,8 @@ Link.prototype.draw = function() {
 		ctx.stroke();
 
 		//Arrowheads
-		if( this.direction == -1 || this.direction == 2 ) { drawArrowhead( p1[0], p1[1], Math.atan( ( p2[1] - p1[1] ) / ( p2[0] - p1[0] ) ) + ( ( p2[0] >= p1[0] ) ? -90 : 90) * Math.PI / 180 ); }
-		if( this.direction == 1 || this.direction == 2 ) { drawArrowhead( p2[0], p2[1], Math.atan( ( p2[1] - p1[1] ) / ( p2[0] - p1[0] ) ) + ( ( p2[0] >= p1[0] ) ? 90 : -90 ) * Math.PI / 180 ); }
+		if( this.direction == -1 || this.direction == 2 ) { drawArrowhead( p1[0], p1[1], Math.atan( ( p2[1] - p1[1] ) / ( p2[0] - p1[0] ) ) + ( ( p2[0] >= p1[0] ) ? -90 : 90) * Math.PI / 180, this.width * 10 ); }
+		if( this.direction == 1 || this.direction == 2 ) { drawArrowhead( p2[0], p2[1], Math.atan( ( p2[1] - p1[1] ) / ( p2[0] - p1[0] ) ) + ( ( p2[0] >= p1[0] ) ? 90 : -90 ) * Math.PI / 180, this.width * 10 ); }
 	} else {
 		var n1 = rel_screen_pos( this.node_one.position );
 		var n2 = rel_screen_pos( this.node_two.position );
@@ -514,14 +616,11 @@ Link.prototype.draw = function() {
 		 */
 		var cc1 = circleCircleIntersect( n1[0], n1[1], this.node_one.size * grid_size * 0.5, p[0], p[1], r )[ to_right ? 0 : 1 ];
 		var cc2 = circleCircleIntersect( n2[0], n2[1], this.node_two.size * grid_size * 0.5, p[0], p[1], r )[ to_right ? 1 : 0 ];
-		var ang_one = Math.asin( Math.abs( cc1[1] - p[1] ) / dist( cc1, p ) );
-		ang_one = p[0] < cc1[0] ? (p[1] < cc1[1] ? ang_one : -ang_one) : (p[1] < cc1[1] ? (Math.PI - ang_one) : Math.PI + ang_one);
-		var ang_two = Math.asin( Math.abs( cc2[1] - p[1] ) / dist( cc2, p ) );
-		ang_two = p[0] < cc2[0] ? (p[1] < cc2[1] ? ang_two : -ang_two) : (p[1] < cc2[1] ? (Math.PI - ang_two) : (Math.PI + ang_two));
+		var ang = arcAngle( p, cc1, cc2 );
 
 		//Draw the arc and take into account which side the cursor lies on
 		ctx.beginPath();
-		ctx.arc( p[0], p[1], r, to_right ? ang_one : ang_two, to_right ? ang_two : ang_one );
+		ctx.arc( p[0], p[1], r, to_right ? ang[0] : ang[1], to_right ? ang[1] : ang[0] );
 		ctx.stroke();
 
 		/*if( this.selected ) {
@@ -533,8 +632,8 @@ Link.prototype.draw = function() {
 		//Arrowheads
 		var start_diff = [ cc1[0] - n1[0], cc1[1] - n1[1] ];
 		var end_diff = [ cc2[0] - n2[0], cc2[1] - n2[1] ];
-		if( this.direction == -1 || this.direction == 2 ) { drawArrowhead( cc1[0], cc1[1], Math.atan2( start_diff[1], start_diff[0] ) - Math.PI / 2 ); }
-		if( this.direction == 1 || this.direction == 2 ) { drawArrowhead( cc2[0], cc2[1], Math.atan2( end_diff[1], end_diff[0] ) - Math.PI / 2 ); }
+		if( this.direction == -1 || this.direction == 2 ) { drawArrowhead( cc1[0], cc1[1], Math.atan2( start_diff[1], start_diff[0] ) - Math.PI / 2, this.width * 10 ); }
+		if( this.direction == 1 || this.direction == 2 ) { drawArrowhead( cc2[0], cc2[1], Math.atan2( end_diff[1], end_diff[0] ) - Math.PI / 2, this.width * 10 ); }
 	}
 
 	ctx.shadowBlur = 0;
@@ -543,6 +642,65 @@ Link.prototype.draw = function() {
 Link.prototype.delete = function() {
 	links[this.index] = null;
 };
+
+
+
+
+
+var Badge = function( node, text, maxwidth ) {
+	this.node = node;
+	this.text = text || "";
+	this.maxwidth = maxwidth || 50;
+
+	this.position = [];
+};
+Badge.prototype.draw = function() {
+	if( this.node == null || !this.node.selected || this.text.length == 0 ) return;
+
+	var last = 0;
+	var lines = this.text.split("\n");
+
+	ctx.save();
+	ctx.font = "14px Courier New";
+	ctx.textAlign = "center";
+	ctx.fillStyle = "#ffffff";
+
+	var maxwidth = 0;
+	for( j = 0; j < lines.length; j++ ) { 
+		if( ctx.measureText( lines[j] ).width > maxwidth ) { 
+			maxwidth = ctx.measureText( lines[j] ).width;
+		}
+	}
+	var padding_x = 20;
+	var padding_y = 2;
+	var width = maxwidth + padding_x;
+	var height = ( 14 + padding_y ) * lines.length + padding_y;
+
+	switch( this.node.shape ) {
+		case 0:
+			this.position = [ this.node.position[0] + 0.707 * this.node.size / 2, this.node.position[1] - 0.707 * this.node.size / 2 - ( (height / 2) / grid_size ) ];
+			var pos = rel_screen_pos( this.position );
+
+			ctx.fillStyle = this.node.outline_color;
+			ctx.strokeStyle = this.node.outline_color;
+			ctx.roundRect( pos[0], pos[1], width, height, grid_size / 3 );
+			ctx.fill();
+
+
+			ctx.fillStyle = "#ffffff";
+			for( j = 0; j < lines.length; j++ ) {
+				ctx.fillText( lines[j], pos[0] + width * 0.5, pos[1] + (j+1) * (14 + padding_y) );
+			}
+
+			break;
+		case 1: break;
+	}
+
+	ctx.restore();
+};
+
+
+
 
 
 /* ------------------------- *\
@@ -635,8 +793,15 @@ Link.prototype.delete = function() {
 			ctx.lineWidth = 1;
 		}
 
-		for(j = 0; j < links.length; j++) { if( links[j] ) links[j].draw(); }
-		for(j = 0; j < nodes.length; j++) {	if( nodes[j] ) nodes[j].draw(); }
+		for(j = 0; j < links.length; j++) {
+			if( links[j] ) links[j].draw();
+		}
+		for(j = 0; j < nodes.length; j++) {
+			if( nodes[j] ) {
+				nodes[j].draw();
+				if( nodes[j].badge != null ) nodes[j].badge.draw();
+			}
+		}
 	}
 
 
@@ -752,6 +917,9 @@ Link.prototype.delete = function() {
 					p.selected = true;
 					default_size = p.size;
 					default_width = p.outline_width;
+
+					var b = new Badge( p, "type: rb node" );
+					p.badge = b;
 				} else if( l ) {
 					//Cannot move a group of nodes/links by a link, so if a link has been clicked
 					if( !ctrl ) deselect_all();
@@ -815,7 +983,6 @@ Link.prototype.delete = function() {
 		if( e.which == 1 ) {
 			lc_down = false;
 
-			console.log( mouse_position );
 			if( !pointInNode( mouse_position ) && !pointInLink( mouse_position ) ) deselect_all();
 			draw_all();
 		} else if( e.which == 3 ) {
@@ -867,7 +1034,7 @@ Link.prototype.delete = function() {
 				var pos_n2 = rel_screen_pos( selected[0].node_two.position );
 
 				var v = vecProj( pos_n1, pos_n2, mouse_position );
-				if( ( v[2] > 0 && v[2] < dist( pos_n1, pos_n2 ) ) && v[3] < 20 ) { selected[0].arc_point = null; }
+				if( ( v[2] > 0 && v[2] < dist( pos_n1, pos_n2 ) ) && v[3] < grid_size ) { selected[0].arc_point = null; }
 				else { selected[0].arc_point = abs_pos( [ mouse_position[0] / grid_size, mouse_position[1] / grid_size ] ); }
 			} else {
 				//Moving a node:
@@ -942,19 +1109,38 @@ Link.prototype.delete = function() {
 		var m_pos = abs_pos( [ pos[0] / grid_size, pos[1] / grid_size ] );
 		viewport = [ ( viewport[0] * grid_size + m_pos[0] * ( new_size - grid_size ) ) / new_size, ( viewport[1] * grid_size + m_pos[1] * ( new_size - grid_size ) ) / new_size ];
 
-
 		grid_size = new_size;
 
 		updateSliders();
 		draw_all();
 	}
-	window.addEventListener( "mousewheel", function(e) { changeZoom( grid_size + (e.wheelDeltaY / 100), mouse_position ); }, false); //not moz
-	window.addEventListener( "DOMMouseScroll", function(e) { changeZoom( grid_size + (e.wheelDeltaY / 100), mouse_position ); }, false); //moz
+	canvas.addEventListener( "mousewheel", function(e) { changeZoom( grid_size + (e.wheelDeltaY / 100), mouse_position ); }, false); //not moz
+	canvas.addEventListener( "DOMMouseScroll", function(e) { changeZoom( grid_size + (e.wheelDeltaY / 100), mouse_position ); }, false); //moz
 
 	//Disable context menu
 	canvas.oncontextmenu = function(e) { e.preventDefault(); };
 
 
+	function updateHTMLTheme( theme ) {
+		var sidebar = document.getElementById( "sidebar" );
+		var dividers = document.querySelector( "hr" );
+		var slider_reset = document.querySelector( ".slider_reset" );
+		var slider_all = document.querySelector( ".slider_all" );
+
+		switch( theme ) {
+			case 1:
+				sidebar.style.backgroundColor = "#ffffff";
+				dividers.style.backgroundColor = "#222222";
+				slider_reset.style.backgroundColor = "#ffffff";
+				slider_all.style.backgroundColor = "#ffffff";
+			case 2:
+				sidebar.style.backgroundColor = "#222222";
+				dividers.style.backgroundColor = "#ffffff";
+				slider_reset.style.backgroundColor = "#222222";
+				slider_all.style.backgroundColor = "#222222";
+		}
+	}
+	//updateHTMLTheme( settings_theme );
 
 	/*------------------------*\
 	| --- SIDEBAR CONTROLS --- |

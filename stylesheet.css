@@ -3,7 +3,14 @@
 /*html, body { width:80%; height:100%; } /* just to be sure these are full screen*/
 
 /*canvas { display:block; } /* To remove the scrollbars */
-
+::-webkit-scrollbar {
+    width: 0px;  /* remove scrollbar space */
+    background: transparent;  /* optional: just make scrollbar invisible */
+}
+/* optional: show position indicator in red */
+::-webkit-scrollbar-thumb {
+    background: #FF0000;
+}
 #canvas, #sidebar {
     height: 100%;
     position: absolute;
@@ -128,12 +135,12 @@ hr {
     border: 1px solid #696969;
     margin-top: 5px;
 }
-p {
-    margin: 5px 5px 5px 5px;
+#spacerdiv {
+  margin: 5px 5px 5px 5px;
+}
+span, p {
     font: 12px Courier;
 }
-
-
 
 
 

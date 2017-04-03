@@ -501,6 +501,7 @@ Node.prototype.drawAsCircle = function( radius ) {
 		for(i = 0; i < Math.min( cutoff, lines.length ); i++ ) {
 			if( i == cutoff - 1 ) lines[i] = lines[i].substring( 0, lines[i].length - 2 ) + "..";
 
+			ctx.fillStyle = this.outline_color;
 			ctx.fillText( lines[i], p[0], p[1] + (this.font_size / 2) - start + i * ( spacing + this.font_size * grid_size ) );
 		}
 	}
@@ -661,6 +662,7 @@ Badge.prototype.draw = function() {
 	var lines = this.text.split("\n");
 
 	ctx.save();
+
 	ctx.font = "14px Courier New";
 	ctx.textAlign = "center";
 	ctx.fillStyle = "#ffffff";
@@ -683,13 +685,13 @@ Badge.prototype.draw = function() {
 
 			ctx.fillStyle = this.node.outline_color;
 			ctx.strokeStyle = this.node.outline_color;
-			ctx.roundRect( pos[0], pos[1], width, height, grid_size / 3 );
+			ctx.roundRect( pos[0], pos[1], width, height, grid_size / 7 );
 			ctx.fill();
 
 
 			ctx.fillStyle = "#ffffff";
 			for( j = 0; j < lines.length; j++ ) {
-				ctx.fillText( lines[j], pos[0] + width * 0.5, pos[1] + (j+1) * (14 + padding_y) );
+				ctx.fillText( lines[j], pos[0] + width * 0.5, pos[1] - 4 + (j+1) * (14 + padding_y) );
 			}
 
 			break;
@@ -714,7 +716,7 @@ Badge.prototype.draw = function() {
 	var default_size = 3;
 	var default_width = 0.1;
 	var default_direction = 1;
-	var default_color = "#000000";
+	var default_color = (settings_theme == 2 || settings_theme == 4 ? "#ffffff" : "#000000");
 
 	var space_down = false;
 	var lc_down = false;
@@ -796,10 +798,12 @@ Badge.prototype.draw = function() {
 		for(j = 0; j < links.length; j++) {
 			if( links[j] ) links[j].draw();
 		}
-		for(j = 0; j < nodes.length; j++) {
-			if( nodes[j] ) {
-				nodes[j].draw();
-				if( nodes[j].badge != null ) nodes[j].badge.draw();
+
+		for(k = 0; k < nodes.length; k++) {
+			console.log( k );
+			if( nodes[k] ) {
+				nodes[k].draw();
+				if( nodes[k].badge != null ) nodes[k].badge.draw();
 			}
 		}
 	}
@@ -921,7 +925,7 @@ Badge.prototype.draw = function() {
 					var b = new Badge( p, "type: rb node" );
 					p.badge = b;
 				} else if( l ) {
-					//Cannot move a group of nodes/links by a link, so if a link has been clicked
+					//Cannot move a group of nodes/links by a link
 					if( !ctrl ) deselect_all();
 
 					if( !found_l ) {
@@ -930,12 +934,11 @@ Badge.prototype.draw = function() {
 						default_width = l.width;
 					}
 				}
-
+				console.log("3");
 				//Update sliders with correct information
 				//If multiple items are selected with different attributes, (multiple) is displayed
 				if( selected.length >= 1 ) {
 					updateInfo( selected[0], selected.length > 1 );
-
 					if( selected.length == 1 ) updateSliders();
 					else {
 						var v_size = default_size;
@@ -1195,7 +1198,10 @@ Badge.prototype.draw = function() {
 			type.innerHTML = "type: ";
 		}
 	}
-
+	function outputText( text ) {
+		var telem = document.getElementById( "outputtext" );
+		telem.innerHTML = text;
+	}
 	document.getElementById( "nodesize_slider" ).addEventListener( 'input', function() {
 		default_size = document.getElementById( "nodesize_slider" ).value || 3;
 		document.getElementById( "nodesize_text" ).value = default_size;
@@ -1274,6 +1280,17 @@ Badge.prototype.draw = function() {
 				else if( selected[i] instanceof Link ) selected[i].color = default_color;
 			}
 			draw_all();
+		}
+	});
+
+	function topsort( node ) {
+
+	}
+	document.getElementById( "topsort" ).addEventListener( "click", function() {
+		if( selected.length == 0 ) outputText( '<span style="color:#ff2424">ERROR: Select node(s) to sort</span>' );
+		else {
+
+			outputText( "Topsort on <strong>Node#" + selected[0].index + "</strong>: " );
 		}
 	});
 

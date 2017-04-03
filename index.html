@@ -103,7 +103,8 @@ Controls:
 
 				<br>
 
-				<select id="font">
+				<label id="font_label">Font</label>
+				<select id="font" style="float:right; margin-right: 5px;">
 						<option value="courier">Courier New</option>
 						<option value="timesnewroman">Times New Roman</option>
 						<option value="arial">Arial</option>
@@ -126,11 +127,13 @@ Controls:
 				<br>
 
 				<button id="topsort" type="button" class="top">Topological Sort</button>
-				<button type="button" class="mid">Meme2</button>
+				<button type="button" class="mid">Placeholder</button>
 
 				<div id="outputbox">
-					<p>Topological sort on nodes: 1 2 3 4 5 6
-						<br><strong>4 3 1 2 6 5 8</strong></p>
+					<div id="spacerdiv">
+						<p id="outputtext">Topological sort on nodes: 1 2 3 4 5 6
+							<br><strong>4 3 1 2 6 5 8</strong></p>
+					</div>
 				</div>
 			</div>
 			<canvas id="canvas" width="80%"></canvas>
